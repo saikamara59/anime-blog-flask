@@ -35,3 +35,12 @@ def sign_token():
     }
     token = jwt.encode(user, os.getenv('JWT_SECRET'), algorithm="HS256")    
     return jsonify({"token": token})
+
+@app.route('/verify-token', methods=['POST'])
+def verify_token():
+    try:
+        token = request.headers.get('Authorization').split(' ')[1]
+        decoded_token = jwt.decode(token, os.getenv('JWT_SECRET'), algorithms=["HS256"])
+        return jsonify({"user": decoded_token})
+    except Exception as error:
+       return jsonify({"error": str(error)})
