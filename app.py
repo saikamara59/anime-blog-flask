@@ -6,7 +6,7 @@ load_dotenv()
 
 # Import the 'Flask' class from the 'flask' library.
 from flask import Flask, jsonify, request , g
-
+from flask_cors import CORS 
 from auth_middleware import token_required
 
 import psycopg2, psycopg2.extras

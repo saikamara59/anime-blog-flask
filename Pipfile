@@ -6,10 +6,10 @@ name = "pypi"
 [packages]
 bcrypt = "*"
 pyjwt = "*"
-flask-cors = "*"
 flask = "*"
-psycopg2-binary = "*"
 python-dotenv = "*"
+psycopg2-binary = "*"
+flask-cors = "*"
 
 [dev-packages]
 
