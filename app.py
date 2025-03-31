@@ -58,3 +58,4 @@ def verify_token():
                 curosr.close()
                 return jsonify({"error": "Username already taken"}), 400
             hashed_password = bcrypt.hashpw(bytes(new_user_data["password"], 'utf-8'), bcrypt.gensalt())
+            cursor.excute("INSERT INTO users (username,email,password) VALUES(%s, %s, %s) RETURNING id,username", (new_user_data["username"], new_user_data["email"],hashed_password.decode('utf-8')))
