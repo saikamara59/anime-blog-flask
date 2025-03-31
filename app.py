@@ -90,3 +90,7 @@ def sign_in():
         return jsonify({"err": "Wrong Username/Password."}), 500
     finally: 
             connection.close()   
+
+@app.route('/')
+def index():
+  return "Landing Page"            
