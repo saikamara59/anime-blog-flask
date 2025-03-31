@@ -44,3 +44,17 @@ def verify_token():
         return jsonify({"user": decoded_token})
     except Exception as error:
        return jsonify({"error": str(error)})
+    
+
+    @app.route('/auth/sign-up', methods=['POST'])
+    def signup():
+        try:
+            new_user_data = request.get_json()
+            connection = get_db_connection()
+            cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+            cursor.execute("SELECT * FROM users Where username = %s or email = %s;", (new_user_data["username"], new_user_data["email"],))
+            existing_user = cursor.fetchone()
+            if existing_user:
+                curosr.close()
+                return jsonify({"error": "Username already taken"}), 400
+            hashed_password = bcrypt.hashpw(bytes(new_user_data["password"], 'utf-8'), bcrypt.gensalt())
