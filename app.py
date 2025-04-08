@@ -18,10 +18,12 @@ app = Flask(__name__)
 CORS(app)
 
 def get_db_connection():
-    connection = psycopg2.connect(host='localhost',
-                            database='anime_blog',
-                            user=os.getenv('POSTGRES_USERNAME'),
-                            password=os.getenv('POSTGRES_PASSWORD'))
+    connection = psycopg2.connect(
+        host='localhost',
+        database='anime_blog',
+        user=os.getenv('POSTGRES_USERNAME'),
+        password=os.getenv('POSTGRES_PASSWORD')
+    )
     return connection
 
 
@@ -52,13 +54,13 @@ def signup():
         new_user_data = request.get_json()
         connection = get_db_connection()
         cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        cursor.execute("SELECT * FROM users Where username = %s or email = %s;", (new_user_data["username"], new_user_data["email"],))
+        cursor.execute("SELECT * FROM users WHERE username = %s or email = %s;", (new_user_data["username"], new_user_data["email"],)) 
         existing_user = cursor.fetchone()
         if existing_user:
             cursor.close()
             return jsonify({"error": "Username already taken"}), 400
         hashed_password = bcrypt.hashpw(bytes(new_user_data["password"], 'utf-8'), bcrypt.gensalt())
-        cursor.excute("INSERT INTO users (username,email,password) VALUES(%s, %s, %s) RETURNING id,username", (new_user_data["username"], new_user_data["email"],hashed_password.decode('utf-8')))
+        cursor.execute("INSERT INTO users (username,email, password) VALUES (%s, %s, %s) RETURNING id,username", (new_user_data["username"], new_user_data["email"],hashed_password.decode('utf-8')))
         created_user = cursor.fetchone()
         connection.commit()
         cursor.close()
@@ -67,7 +69,7 @@ def signup():
         token = jwt.encode({ "payload": payload }, os.getenv('JWT_SECRET'))
         return jsonify({"token": token, "user": created_user}), 201
     except Exception as err:
-            return jsonify({"error":  str(err)}), 401
+        return jsonify({"error":  str(err)}), 401
         
 @app.route('/auth/sign-in', methods=["POST"])
 def sign_in():
