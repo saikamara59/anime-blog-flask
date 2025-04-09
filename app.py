@@ -177,3 +177,32 @@ def get_posts():
         return jsonify({"error": str(err)}), 500
     finally:
         connection.close()
+
+
+@app.route('/posts/<int:post_id>', methods=['GET'])
+def get_post(post_id):
+    try:
+        # Connect to the database
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Query to fetch the post by ID
+        query = """
+            SELECT posts.*, users.username AS author 
+            FROM posts 
+            JOIN users ON posts.user_id = users.id
+            WHERE posts.id = %s
+        """
+        cursor.execute(query, (post_id,))
+        post = cursor.fetchone()
+
+        # If the post is not found, return a 404 error
+        if not post:
+            return jsonify({"error": "Post not found"}), 404
+
+        # Return the post as a response
+        return jsonify({"post": post}), 200
+    except Exception as err:
+        return jsonify({"error": str(err)}), 500
+    finally:
+        connection.close()
