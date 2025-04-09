@@ -153,3 +153,44 @@ def delete_post(post_id):
         return jsonify({"error": str(err)}), 500
     finally:
         connection.close()
+
+
+@post_routes.route('/posts/<int:post_id>/comments', methods=['POST'])
+@token_required
+def add_comment(post_id):
+    try:
+        # Get the current user from the global 'g' object
+        current_user = g.user
+
+        # Get the comment data from the request
+        comment_data = request.get_json()
+        if not comment_data.get("content"):
+            return jsonify({"error": "Comment content is required"}), 400
+
+        # Connect to the database
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Check if the post exists
+        cursor.execute("SELECT * FROM posts WHERE id = %s;", (post_id,))
+        post = cursor.fetchone()
+        if not post:
+            return jsonify({"error": "Post not found"}), 404
+
+        # Insert the comment into the database
+        cursor.execute(
+            """
+            INSERT INTO comments (content, user_id, post_id) 
+            VALUES (%s, %s, %s) RETURNING *;
+            """,
+            (comment_data["content"], current_user["id"], post_id)
+        )
+        new_comment = cursor.fetchone()
+        connection.commit()
+
+        # Return the created comment as a response
+        return jsonify({"comment": new_comment}), 201
+    except Exception as err:
+        return jsonify({"error": str(err)}), 500
+    finally:
+        connection.close()
