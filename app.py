@@ -96,3 +96,49 @@ def sign_in():
 @app.route('/')
 def index():
   return "Landing Page"            
+
+
+
+@app.route('/posts', methods=['POST'])
+@token_required
+def create_post():
+    try:
+        # Get the current user from the global 'g' object
+        current_user = g.user
+
+        # Get the post data from the request
+        post_data = request.get_json()
+        
+        # Validate required fields
+        if not post_data.get("title"):
+            return jsonify({"error": "Title is required"}), 400
+        
+        # Connect to the database
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        
+        # Insert the new post into the database
+        cursor.execute(
+            """
+            INSERT INTO posts (title, content, tags, user_id, media_url) 
+            VALUES (%s, %s, %s, %s, %s) RETURNING *;
+            """,
+            (
+                post_data["title"],
+                post_data.get("content"),  # Optional content
+                post_data.get("tags"),    # Optional tags
+                current_user["id"],       # User ID from the token
+                post_data.get("media_url")  # Optional media URL
+            )
+        )
+        
+        # Fetch the newly created post
+        new_post = cursor.fetchone()
+        connection.commit()
+        
+        # Return the created post as a response
+        return jsonify({"post": new_post}), 201
+    except Exception as err:
+        return jsonify({"error": str(err)}), 500
+    finally:
+        connection.close()
