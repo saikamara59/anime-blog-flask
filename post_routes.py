@@ -194,3 +194,69 @@ def add_comment(post_id):
         return jsonify({"error": str(err)}), 500
     finally:
         connection.close()
+
+@post_routes.route('/posts/<int:post_id>/comments', methods=['GET'])
+def get_comments(post_id):
+    try:
+        # Connect to the database
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Check if the post exists
+        cursor.execute("SELECT * FROM posts WHERE id = %s;", (post_id,))
+        post = cursor.fetchone()
+        if not post:
+            return jsonify({"error": "Post not found"}), 404
+
+        # Retrieve all comments for the post
+        cursor.execute(
+            """
+            SELECT comments.*, users.username AS author 
+            FROM comments 
+            JOIN users ON comments.user_id = users.id
+            WHERE comments.post_id = %s
+            ORDER BY comments.created_at ASC;
+            """,
+            (post_id,)
+        )
+        comments = cursor.fetchall()
+
+        # Return the comments as a response
+        return jsonify({"comments": comments}), 200
+    except Exception as err:
+        return jsonify({"error": str(err)}), 500
+    finally:
+        connection.close()
+
+@post_routes.route('/comments/<int:comment_id>', methods=['DELETE'])
+@token_required
+def delete_comment(comment_id):
+    try:
+        # Get the current user from the global 'g' object
+        current_user = g.user
+
+        # Connect to the database
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Check if the comment exists and belongs to the current user
+        cursor.execute("SELECT * FROM comments WHERE id = %s;", (comment_id,))
+        comment = cursor.fetchone()
+
+        if not comment:
+            return jsonify({"error": "Comment not found"}), 404
+
+        # Check if the user is authorized to delete the comment
+        if comment["user_id"] != current_user["id"] and not current_user.get("is_admin"):
+           return jsonify({"error": "You are not authorized to delete this comment"}), 403
+
+        # Delete the comment
+        cursor.execute("DELETE FROM comments WHERE id = %s;", (comment_id,))
+        connection.commit()
+
+        # Return a success message
+        return jsonify({"message": "Comment deleted successfully"}), 200
+    except Exception as err:
+        return jsonify({"error": str(err)}), 500
+    finally:
+        connection.close()
