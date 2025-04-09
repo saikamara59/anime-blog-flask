@@ -4,27 +4,28 @@ import os
 import jwt
 load_dotenv()
 
-# Import the 'Flask' class from the 'flask' library.
 from flask import Flask, jsonify, request , g
 from flask_cors import CORS 
+from post_routes import post_routes  
 from auth_middleware import token_required
+from db_utils import get_db_connection  # Import from db_utils.py
 
 import psycopg2, psycopg2.extras
 
-
-# Initialize Flask
-# We'll use the pre-defined global '__name__' variable to tell Flask where it is.
 app = Flask(__name__)
 CORS(app)
 
-def get_db_connection():
-    connection = psycopg2.connect(
-        host='localhost',
-        database='anime_blog',
-        user=os.getenv('POSTGRES_USERNAME'),
-        password=os.getenv('POSTGRES_PASSWORD')
-    )
-    return connection
+
+app.register_blueprint(post_routes, url_prefix='/api')  # Prefix all post routes with /api
+
+# def get_db_connection():
+#     connection = psycopg2.connect(
+#         host='localhost',
+#         database='anime_blog',
+#         user=os.getenv('POSTGRES_USERNAME'),
+#         password=os.getenv('POSTGRES_PASSWORD')
+#     )
+#     return connection
 
 
 @app.route('/sign-token', methods=['GET'])
@@ -95,114 +96,6 @@ def sign_in():
 
 @app.route('/')
 def index():
-  return "Landing Page"            
+  return "Landing Page"                
 
 
-
-@app.route('/posts', methods=['POST'])
-@token_required
-def create_post():
-    try:
-        # Get the current user from the global 'g' object
-        current_user = g.user
-
-        # Get the post data from the request
-        post_data = request.get_json()
-        
-        # Validate required fields
-        if not post_data.get("title"):
-            return jsonify({"error": "Title is required"}), 400
-        
-        # Connect to the database
-        connection = get_db_connection()
-        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-        
-        # Insert the new post into the database
-        cursor.execute(
-            """
-            INSERT INTO posts (title, content, tags, user_id, media_url) 
-            VALUES (%s, %s, %s, %s, %s) RETURNING *;
-            """,
-            (
-                post_data["title"],
-                post_data.get("content"),  # Optional content
-                post_data.get("tags"),    # Optional tags
-                current_user["id"],       # User ID from the token
-                post_data.get("media_url")  # Optional media URL
-            )
-        )
-        
-        # Fetch the newly created post
-        new_post = cursor.fetchone()
-        connection.commit()
-        
-        # Return the created post as a response
-        return jsonify({"post": new_post}), 201
-    except Exception as err:
-        return jsonify({"error": str(err)}), 500
-    finally:
-        connection.close()
-
-
-@app.route('/posts', methods=['GET'])
-def get_posts():
-    try:
-        # Get optional query parameters for filtering
-        tag_filter = request.args.get('tag')  # Example: /posts?tag=anime
-
-        # Connect to the database
-        connection = get_db_connection()
-        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-
-        # Base query to fetch all posts
-        query = """
-            SELECT posts.*, users.username AS author 
-            FROM posts 
-            JOIN users ON posts.user_id = users.id
-        """
-        params = []
-
-        # Add filtering by tag if provided
-        if tag_filter:
-            query += " WHERE tags ILIKE %s"
-            params.append(f"%{tag_filter}%")
-
-        # Execute the query
-        cursor.execute(query, params)
-        posts = cursor.fetchall()
-
-        # Return the posts as a response
-        return jsonify({"posts": posts}), 200
-    except Exception as err:
-        return jsonify({"error": str(err)}), 500
-    finally:
-        connection.close()
-
-
-@app.route('/posts/<int:post_id>', methods=['GET'])
-def get_post(post_id):
-    try:
-        # Connect to the database
-        connection = get_db_connection()
-        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
-
-        # Query to fetch the post by ID
-        query = """
-            SELECT posts.*, users.username AS author 
-            FROM posts 
-            JOIN users ON posts.user_id = users.id
-            WHERE posts.id = %s
-        """
-        cursor.execute(query, (post_id,))
-        post = cursor.fetchone()
-
-        # If the post is not found, return a 404 error
-        if not post:
-            return jsonify({"error": "Post not found"}), 404
-
-        # Return the post as a response
-        return jsonify({"post": post}), 200
-    except Exception as err:
-        return jsonify({"error": str(err)}), 500
-    finally:
-        connection.close()
