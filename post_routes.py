@@ -123,3 +123,33 @@ def update_post(post_id):
         return jsonify({"error": str(err)}), 500
     finally:
         connection.close()
+
+
+@post_routes.route('/posts/<int:post_id>', methods=['DELETE'])
+@token_required
+def delete_post(post_id):
+    try:
+        # Get the current user from the global 'g' object
+        current_user = g.user
+
+        # Connect to the database
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Check if the post exists and belongs to the current user
+        cursor.execute("SELECT * FROM posts WHERE id = %s AND user_id = %s;", (post_id, current_user["id"]))
+        post = cursor.fetchone()
+
+        if not post:
+            return jsonify({"error": "Post not found or you are not authorized to delete this post"}), 403
+
+        # Delete the post
+        cursor.execute("DELETE FROM posts WHERE id = %s;", (post_id,))
+        connection.commit()
+
+        # Return a success message
+        return jsonify({"message": "Post deleted successfully"}), 200
+    except Exception as err:
+        return jsonify({"error": str(err)}), 500
+    finally:
+        connection.close()
