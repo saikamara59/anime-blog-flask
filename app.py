@@ -142,3 +142,38 @@ def create_post():
         return jsonify({"error": str(err)}), 500
     finally:
         connection.close()
+
+
+@app.route('/posts', methods=['GET'])
+def get_posts():
+    try:
+        # Get optional query parameters for filtering
+        tag_filter = request.args.get('tag')  # Example: /posts?tag=anime
+
+        # Connect to the database
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Base query to fetch all posts
+        query = """
+            SELECT posts.*, users.username AS author 
+            FROM posts 
+            JOIN users ON posts.user_id = users.id
+        """
+        params = []
+
+        # Add filtering by tag if provided
+        if tag_filter:
+            query += " WHERE tags ILIKE %s"
+            params.append(f"%{tag_filter}%")
+
+        # Execute the query
+        cursor.execute(query, params)
+        posts = cursor.fetchall()
+
+        # Return the posts as a response
+        return jsonify({"posts": posts}), 200
+    except Exception as err:
+        return jsonify({"error": str(err)}), 500
+    finally:
+        connection.close()
