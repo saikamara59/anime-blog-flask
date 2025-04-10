@@ -261,8 +261,6 @@ def delete_comment(comment_id):
     finally:
         connection.close()
 
-
-
 @post_routes.route('/posts/<int:post_id>/like', methods=['POST'])
 @token_required
 def like_post(post_id):
@@ -348,6 +346,107 @@ def get_like_count(post_id):
 
         # Return the like count
         return jsonify({"like_count": like_count["like_count"]}), 200
+    except Exception as err:
+        return jsonify({"error": str(err)}), 500
+    finally:
+        connection.close()
+
+@post_routes.route('/users/<int:user_id>', methods=['GET'])
+def get_user_profile(user_id):
+    try:
+        # Connect to the database
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Fetch the user's profile
+        cursor.execute("SELECT id, username, email, created_at FROM users WHERE id = %s;", (user_id,))
+        user = cursor.fetchone()
+
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Return the user's profile
+        return jsonify({"user": user}), 200
+    except Exception as err:
+        return jsonify({"error": str(err)}), 500
+    finally:
+        connection.close()
+
+@post_routes.route('/users/<int:user_id>', methods=['PUT'])
+@token_required
+def update_user_profile(user_id):
+    try:
+        # Get the current user from the global 'g' object
+        current_user = g.user
+
+        # Ensure the user is updating their own profile
+        if current_user["id"] != user_id:
+            return jsonify({"error": "You are not authorized to update this profile"}), 403
+
+        # Get the updated profile data from the request
+        profile_data = request.get_json()
+        if not profile_data:
+            return jsonify({"error": "No data provided"}), 400
+
+        # Connect to the database
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Update the user's profile
+        update_fields = []
+        update_values = []
+
+        if profile_data.get("username"):
+            update_fields.append("username = %s")
+            update_values.append(profile_data["username"])
+        if profile_data.get("email"):
+            update_fields.append("email = %s")
+            update_values.append(profile_data["email"])
+
+        if not update_fields:
+            return jsonify({"error": "No valid fields to update"}), 400
+
+        update_values.append(user_id)
+        query = f"UPDATE users SET {', '.join(update_fields)} WHERE id = %s RETURNING id, username, email, created_at;"
+        cursor.execute(query, update_values)
+        updated_user = cursor.fetchone()
+        connection.commit()
+
+        # Return the updated profile
+        return jsonify({"user": updated_user}), 200
+    except Exception as err:
+        return jsonify({"error": str(err)}), 500
+    finally:
+        connection.close()
+
+@post_routes.route('/users/<int:user_id>/posts', methods=['GET'])
+def get_user_posts(user_id):
+    try:
+        # Connect to the database
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Check if the user exists
+        cursor.execute("SELECT * FROM users WHERE id = %s;", (user_id,))
+        user = cursor.fetchone()
+        if not user:
+            return jsonify({"error": "User not found"}), 404
+
+        # Fetch all posts created by the user
+        cursor.execute(
+            """
+            SELECT posts.*, users.username AS author 
+            FROM posts 
+            JOIN users ON posts.user_id = users.id
+            WHERE posts.user_id = %s
+            ORDER BY posts.created_at DESC;
+            """,
+            (user_id,)
+        )
+        posts = cursor.fetchall()
+
+        # Return the user's posts
+        return jsonify({"posts": posts}), 200
     except Exception as err:
         return jsonify({"error": str(err)}), 500
     finally:
