@@ -328,3 +328,27 @@ def unlike_post(post_id):
         return jsonify({"error": str(err)}), 500
     finally:
         connection.close()
+
+@post_routes.route('/posts/<int:post_id>/likes', methods=['GET'])
+def get_like_count(post_id):
+    try:
+        # Connect to the database
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Check if the post exists
+        cursor.execute("SELECT * FROM posts WHERE id = %s;", (post_id,))
+        post = cursor.fetchone()
+        if not post:
+            return jsonify({"error": "Post not found"}), 404
+
+        # Get the like count for the post
+        cursor.execute("SELECT COUNT(*) AS like_count FROM likes WHERE post_id = %s;", (post_id,))
+        like_count = cursor.fetchone()
+
+        # Return the like count
+        return jsonify({"like_count": like_count["like_count"]}), 200
+    except Exception as err:
+        return jsonify({"error": str(err)}), 500
+    finally:
+        connection.close()
