@@ -260,3 +260,71 @@ def delete_comment(comment_id):
         return jsonify({"error": str(err)}), 500
     finally:
         connection.close()
+
+
+
+@post_routes.route('/posts/<int:post_id>/like', methods=['POST'])
+@token_required
+def like_post(post_id):
+    try:
+        # Get the current user from the global 'g' object
+        current_user = g.user
+
+        # Connect to the database
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Check if the post exists
+        cursor.execute("SELECT * FROM posts WHERE id = %s;", (post_id,))
+        post = cursor.fetchone()
+        if not post:
+            return jsonify({"error": "Post not found"}), 404
+
+        # Check if the user has already liked the post
+        cursor.execute("SELECT * FROM likes WHERE user_id = %s AND post_id = %s;", (current_user["id"], post_id))
+        like = cursor.fetchone()
+        if like:
+            return jsonify({"error": "You have already liked this post"}), 400
+
+        # Insert the like into the database
+        cursor.execute(
+            "INSERT INTO likes (user_id, post_id) VALUES (%s, %s) RETURNING *;",
+            (current_user["id"], post_id)
+        )
+        new_like = cursor.fetchone()
+        connection.commit()
+
+        # Return a success message
+        return jsonify({"message": "Post liked successfully", "like": new_like}), 201
+    except Exception as err:
+        return jsonify({"error": str(err)}), 500
+    finally:
+        connection.close()
+
+@post_routes.route('/posts/<int:post_id>/like', methods=['DELETE'])
+@token_required
+def unlike_post(post_id):
+    try:
+        # Get the current user from the global 'g' object
+        current_user = g.user
+
+        # Connect to the database
+        connection = get_db_connection()
+        cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Check if the like exists
+        cursor.execute("SELECT * FROM likes WHERE user_id = %s AND post_id = %s;", (current_user["id"], post_id))
+        like = cursor.fetchone()
+        if not like:
+            return jsonify({"error": "You have not liked this post"}), 400
+
+        # Delete the like
+        cursor.execute("DELETE FROM likes WHERE user_id = %s AND post_id = %s;", (current_user["id"], post_id))
+        connection.commit()
+
+        # Return a success message
+        return jsonify({"message": "Post unliked successfully"}), 200
+    except Exception as err:
+        return jsonify({"error": str(err)}), 500
+    finally:
+        connection.close()
