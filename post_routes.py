@@ -43,25 +43,46 @@ def create_post():
 @post_routes.route('/posts', methods=['GET'])
 def get_posts():
     try:
+        # Get query parameters for pagination
+        page = int(request.args.get('page', 1))  # Default to page 1
+        limit = int(request.args.get('limit', 10))  # Default to 10 posts per page
+        offset = (page - 1) * limit
+
+        # Optional tag filter
         tag_filter = request.args.get('tag')
+
+        # Connect to the database
         connection = get_db_connection()
         cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Base query to fetch posts
         query = """
             SELECT posts.*, users.username AS author 
             FROM posts 
             JOIN users ON posts.user_id = users.id
         """
         params = []
+
+        # Add filtering by tag if provided
         if tag_filter:
             query += " WHERE tags ILIKE %s"
             params.append(f"%{tag_filter}%")
+
+        # Add pagination
+        query += " ORDER BY posts.created_at DESC LIMIT %s OFFSET %s"
+        params.extend([limit, offset])
+
+        # Execute the query
         cursor.execute(query, params)
         posts = cursor.fetchall()
-        return jsonify({"posts": posts}), 200
+
+        # Return the posts as a response
+        return jsonify({"posts": posts, "page": page, "limit": limit}), 200
     except Exception as err:
         return jsonify({"error": str(err)}), 500
     finally:
         connection.close()
+
 
 @post_routes.route('/posts/<int:post_id>', methods=['GET'])
 def get_post(post_id):
@@ -198,6 +219,11 @@ def add_comment(post_id):
 @post_routes.route('/posts/<int:post_id>/comments', methods=['GET'])
 def get_comments(post_id):
     try:
+        # Get query parameters for pagination
+        page = int(request.args.get('page', 1))  # Default to page 1
+        limit = int(request.args.get('limit', 10))  # Default to 10 comments per page
+        offset = (page - 1) * limit
+
         # Connect to the database
         connection = get_db_connection()
         cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
@@ -208,21 +234,22 @@ def get_comments(post_id):
         if not post:
             return jsonify({"error": "Post not found"}), 404
 
-        # Retrieve all comments for the post
+        # Retrieve paginated comments for the post
         cursor.execute(
             """
             SELECT comments.*, users.username AS author 
             FROM comments 
             JOIN users ON comments.user_id = users.id
             WHERE comments.post_id = %s
-            ORDER BY comments.created_at ASC;
+            ORDER BY comments.created_at ASC
+            LIMIT %s OFFSET %s;
             """,
-            (post_id,)
+            (post_id, limit, offset)
         )
         comments = cursor.fetchall()
 
         # Return the comments as a response
-        return jsonify({"comments": comments}), 200
+        return jsonify({"comments": comments, "page": page, "limit": limit}), 200
     except Exception as err:
         return jsonify({"error": str(err)}), 500
     finally:
@@ -451,3 +478,5 @@ def get_user_posts(user_id):
         return jsonify({"error": str(err)}), 500
     finally:
         connection.close()
+
+
