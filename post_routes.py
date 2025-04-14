@@ -11,12 +11,39 @@ post_routes = Blueprint('post_routes', __name__)
 @token_required
 def create_post():
     try:
+        # Get the current user from the global 'g' object
         current_user = g.user
+
+        # Get the post data from the request
         post_data = request.get_json()
         if not post_data.get("title"):
             return jsonify({"error": "Title is required"}), 400
+        if not post_data.get("content"):
+            return jsonify({"error": "Content is required"}), 400
+
+        # Use spaCy to suggest tags if none are provided
+        tags = post_data.get("tags")
+        if not tags:
+            import spacy
+            nlp = spacy.load("en_core_web_sm")
+            doc = nlp(post_data["content"])
+
+            # Extract keywords and named entities as tags
+            suggested_tags = set()
+            for token in doc:
+                if token.is_alpha and not token.is_stop and token.pos_ in ["NOUN", "PROPN"]:
+                    suggested_tags.add(token.lemma_.lower())
+            for ent in doc.ents:
+                suggested_tags.add(ent.text.lower())
+
+            # Limit the number of tags to 5
+            tags = ", ".join(list(suggested_tags)[:5])
+
+        # Connect to the database
         connection = get_db_connection()
         cursor = connection.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+
+        # Insert the post into the database
         cursor.execute(
             """
             INSERT INTO posts (title, content, tags, user_id, media_url) 
@@ -24,15 +51,17 @@ def create_post():
             """,
             (
                 post_data["title"],
-                post_data.get("content"),
-                post_data.get("tags"),
+                post_data["content"],
+                tags,
                 current_user["id"],
                 post_data.get("media_url")
             )
         )
         new_post = cursor.fetchone()
         connection.commit()
-        return jsonify({"post": new_post}), 201
+
+        # Return the created post along with the suggested tags
+        return jsonify({"post": new_post, "suggested_tags": tags}), 201
     except Exception as err:
         return jsonify({"error": str(err)}), 500
     finally:
@@ -48,8 +77,10 @@ def get_posts():
         limit = int(request.args.get('limit', 10))  # Default to 10 posts per page
         offset = (page - 1) * limit
 
-        # Optional tag filter
-        tag_filter = request.args.get('tag')
+        # Get query parameters for search and filtering
+        search_query = request.args.get('q')  # Search keyword
+        tag_filter = request.args.get('tag')  # Filter by tag
+        author_filter = request.args.get('author')  # Filter by author username
 
         # Connect to the database
         connection = get_db_connection()
@@ -61,12 +92,27 @@ def get_posts():
             FROM posts 
             JOIN users ON posts.user_id = users.id
         """
+        conditions = []
         params = []
 
-        # Add filtering by tag if provided
+        # Add search condition
+        if search_query:
+            conditions.append("(posts.title ILIKE %s OR posts.content ILIKE %s)")
+            params.extend([f"%{search_query}%", f"%{search_query}%"])
+
+        # Add tag filter condition
         if tag_filter:
-            query += " WHERE tags ILIKE %s"
+            conditions.append("posts.tags ILIKE %s")
             params.append(f"%{tag_filter}%")
+
+        # Add author filter condition
+        if author_filter:
+            conditions.append("users.username = %s")
+            params.append(author_filter)
+
+        # Combine conditions with AND
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
 
         # Add pagination
         query += " ORDER BY posts.created_at DESC LIMIT %s OFFSET %s"
@@ -480,3 +526,34 @@ def get_user_posts(user_id):
         connection.close()
 
 
+
+@post_routes.route('/posts/suggest-tags', methods=['POST'])
+@token_required
+def suggest_tags():
+    try:
+        # Get the post content from the request
+        post_data = request.get_json()
+        content = post_data.get("content")
+        if not content:
+            return jsonify({"error": "Post content is required"}), 400
+
+        # Use spaCy to analyze the content
+        import spacy
+        nlp = spacy.load("en_core_web_sm")
+        doc = nlp(content)
+
+        # Extract keywords and named entities as tags
+        tags = set()
+        for token in doc:
+            if token.is_alpha and not token.is_stop and token.pos_ in ["NOUN", "PROPN"]:
+                tags.add(token.lemma_.lower())
+        for ent in doc.ents:
+            tags.add(ent.text.lower())
+
+        # Limit the number of tags to 5
+        suggested_tags = list(tags)[:5]
+
+        # Return the suggested tags
+        return jsonify({"suggested_tags": suggested_tags}), 200
+    except Exception as err:
+        return jsonify({"error": str(err)}), 500
