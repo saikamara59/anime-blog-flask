@@ -518,7 +518,7 @@ def get_user_posts(user_id):
         )
         posts = cursor.fetchall()
 
-        # Return the user's posts
+        
         return jsonify({"posts": posts}), 200
     except Exception as err:
         return jsonify({"error": str(err)}), 500
